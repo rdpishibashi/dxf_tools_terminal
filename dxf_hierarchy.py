@@ -3,6 +3,7 @@ import sys
 import ezdxf
 import argparse
 from io import StringIO
+import os
 
 try:
     from ezdxf.lldxf.writer import TagWriter  # ezdxf >= 0.19
@@ -86,21 +87,74 @@ def get_sorted_entity_tags(entity):
 
     return [f"- {code} ({meaning}): {value}" for code, meaning, value in tags]
 
-if __name__ == "__main__":
+def ensure_file_extension(filename, default_ext):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+def get_default_output_filename(input_dxf):
+    """
+    デフォルトの出力ファイル名を生成する
+    入力ファイルの名前をベースにして、階層構造を示す接尾辞を追加
+    """
+    base = os.path.basename(input_dxf)
+    name, _ = os.path.splitext(base)
+    return f"{name}_hierarchy.md"
+
+def main():
     parser = argparse.ArgumentParser(description='DXF階層構造をMarkdownで出力')
     parser.add_argument('input_dxf', help='入力DXFファイル')
-    parser.add_argument('output_file', help='出力ファイル（.md）')
+    parser.add_argument('output_file', nargs='?', help='出力ファイル（.md）。指定しない場合は自動生成')
     args = parser.parse_args()
 
-    if not args.output_file.endswith('.md') or not args.output_file.endswith('.txt'):
-        print("⚠️  警告: 出力ファイルの拡張子は '.txt' か '.md' です。")
+    # 入力ファイル名に拡張子を追加
+    input_dxf = ensure_file_extension(args.input_dxf, '.dxf')
+
+    # 入力ファイルの存在確認
+    if not os.path.exists(input_dxf):
+        print(f"エラー: 入力ファイル '{input_dxf}' が見つかりません")
         sys.exit(1)
 
-    doc = ezdxf.readfile(args.input_dxf)
-    hierarchy = extract_hierarchy(doc)
+    # 出力ファイル名の処理
+    if args.output_file is None:
+        # 出力ファイル名が指定されていない場合、デフォルト名を生成
+        output_file = get_default_output_filename(input_dxf)
+        print(f"出力ファイル名が指定されていないため、デフォルト名を使用します: {output_file}")
+    else:
+        # 出力ファイル名が指定されている場合、拡張子を確認・追加
+        output_file = ensure_file_extension(args.output_file, '.md')
 
-    with open(args.output_file, 'w', encoding='utf-8') as f:
-        for line in hierarchy:
-            f.write(line + "\n")
+    # 出力ファイル拡張子の確認
+    if not output_file.endswith('.md') and not output_file.endswith('.txt'):
+        print("⚠️  警告: 出力ファイルの拡張子は '.txt' か '.md' を推奨します。")
+        if not "." in output_file:
+            output_file += '.md'
+            print(f"出力ファイル名を '{output_file}' に変更しました")
 
-    print(f"Markdown出力完了: {args.output_file}")
+    # 出力先ディレクトリの存在確認と作成
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir)
+            print(f"出力ディレクトリ '{output_dir}' を作成しました")
+        except Exception as e:
+            print(f"エラー: 出力ディレクトリ '{output_dir}' を作成できません: {str(e)}")
+            sys.exit(1)
+
+    try:
+        doc = ezdxf.readfile(input_dxf)
+        hierarchy = extract_hierarchy(doc)
+
+        with open(output_file, 'w', encoding='utf-8') as f:
+            for line in hierarchy:
+                f.write(line + "\n")
+
+        print(f"Markdown出力完了: {output_file}")
+    except Exception as e:
+        print(f"エラーが発生しました: {str(e)}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

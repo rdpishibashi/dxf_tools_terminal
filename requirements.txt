@@ -1,4 +1,6 @@
 ezdxf
-numpy
-openpyxl
 pandas
+streamlit
+openpyxl
+matplotlib
+numpy

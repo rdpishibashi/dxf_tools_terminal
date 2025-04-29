@@ -2,6 +2,7 @@ import sys
 import ezdxf
 from ezdxf.addons import Importer
 import math
+import os
 
 def compare_dxf_files_and_generate_dxf(file_a, file_b, output_file, tolerance=1e-6):
     try:
@@ -223,23 +224,74 @@ def copy_entity_to_result(entity, msp_result, layer_name):
             }
         )
 
+def ensure_file_extension(filename, default_ext):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+def get_default_output_filename(file_a, file_b):
+    """
+    デフォルトの出力ファイル名を生成する
+    入力ファイルAの名前をベースにして、比較結果を示す接尾辞を追加
+    """
+    base_a = os.path.basename(file_a)
+    name_a, ext_a = os.path.splitext(base_a)
+    return f"{name_a}_compared_with_{os.path.basename(file_b).replace('.', '_')}.dxf"
 
 import argparse
 
-parser = argparse.ArgumentParser(description='2つのDXFファイルを比較し、図形要素の差分をDXF形式で出力（図形差分を可視化）')
-parser.add_argument('file_a', help='基準となるDXFファイル (A)')
-parser.add_argument('file_b', help='比較対象のDXFファイル (B)')
-parser.add_argument('output_dxf', help='出力先のDXFファイル名（.dxf）')
-parser.add_argument('--tolerance', type=float, default=1e-6, help='浮動小数点比較の許容誤差（例: 1e-6）')
+def main():
+    parser = argparse.ArgumentParser(description='2つのDXFファイルを比較し、図形要素の差分をDXF形式で出力（図形差分を可視化）')
+    parser.add_argument('file_a', help='基準となるDXFファイル (A)')
+    parser.add_argument('file_b', help='比較対象のDXFファイル (B)')
+    parser.add_argument('output_dxf', nargs='?', help='出力先のDXFファイル名（.dxf）。指定しない場合は自動生成')
+    parser.add_argument('--tolerance', type=float, default=1e-6, help='浮動小数点比較の許容誤差（例: 1e-6）')
 
-args = parser.parse_args()
+    args = parser.parse_args()
 
-if not args.output_dxf.endswith('.dxf'):
-    print("⚠️  警告: 出力ファイルの拡張子は '.dxf' である必要があります。")
-    sys.exit(1)
+    # 入力ファイル名に拡張子を追加
+    file_a = ensure_file_extension(args.file_a, '.dxf')
+    file_b = ensure_file_extension(args.file_b, '.dxf')
 
-if compare_dxf_files_and_generate_dxf(args.file_a, args.file_b, args.output_dxf, args.tolerance):
-    print(f"DXFファイル比較完了 出力ファイル： {args.output_dxf}")
-else:
-    print("DXFファイル比較 失敗")
-    sys.exit(1)
+    # 出力ファイル名の処理
+    if args.output_dxf is None:
+        # 出力ファイル名が指定されていない場合、デフォルト名を生成
+        output_dxf = get_default_output_filename(file_a, file_b)
+        print(f"出力ファイル名が指定されていないため、デフォルト名を使用します: {output_dxf}")
+    else:
+        # 出力ファイル名が指定されている場合、拡張子を確認・追加
+        output_dxf = ensure_file_extension(args.output_dxf, '.dxf')
+
+    # ファイル存在チェック
+    if not os.path.exists(file_a):
+        print(f"エラー: ファイル '{file_a}' が見つかりません。")
+        sys.exit(1)
+    if not os.path.exists(file_b):
+        print(f"エラー: ファイル '{file_b}' が見つかりません。")
+        sys.exit(1)
+
+    # 出力ディレクトリの存在確認と作成
+    output_dir = os.path.dirname(output_dxf)
+    if output_dir and not os.path.exists(output_dir):
+        try:
+            os.makedirs(output_dir)
+            print(f"出力ディレクトリ '{output_dir}' を作成しました。")
+        except Exception as e:
+            print(f"エラー: 出力ディレクトリ '{output_dir}' を作成できません: {str(e)}")
+            sys.exit(1)
+
+    if not output_dxf.endswith('.dxf'):
+        print("⚠️  警告: 出力ファイルの拡張子は '.dxf' である必要があります。")
+        output_dxf += '.dxf'
+        print(f"出力ファイル名を '{output_dxf}' に変更しました。")
+
+    if compare_dxf_files_and_generate_dxf(file_a, file_b, output_dxf, args.tolerance):
+        print(f"DXFファイル比較完了 出力ファイル： {output_dxf}")
+    else:
+        print("DXFファイル比較 失敗")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()

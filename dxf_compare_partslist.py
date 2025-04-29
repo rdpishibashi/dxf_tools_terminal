@@ -118,6 +118,24 @@ def compare_label_files(dxf_labels_file, circuit_symbols_file, output_file, verb
             traceback.print_exc(file=sys.stderr)
         return False # 異常終了
 
+def ensure_file_extension(filename, default_ext):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+def get_default_output_filename(dxf_labels_file, circuit_symbols_file):
+    """
+    デフォルトの出力ファイル名を生成する
+    入力ファイル名をベースにして、比較結果を示す名前を生成
+    """
+    base_dxf = os.path.basename(dxf_labels_file)
+    base_circuit = os.path.basename(circuit_symbols_file)
+    name_dxf, _ = os.path.splitext(base_dxf)
+    name_circuit, _ = os.path.splitext(base_circuit)
+    return f"{name_dxf}_vs_{name_circuit}.md"
+
 def main():
     parser = argparse.ArgumentParser(
         description='2つの部品リストファイル（テキスト形式）を比較し、差分をマークダウン形式で出力します。',
@@ -126,27 +144,40 @@ def main():
     # 引数のヘルプメッセージを少し具体的に修正
     parser.add_argument('dxf_labels_file', help='図面上の部品ラベルが1行1ラベルで記述されたファイル (.txt)')
     parser.add_argument('circuit_symbols_file', help='回路図シンボル（部品表など）が1行1ラベルで記述されたファイル (.txt)')
-    parser.add_argument('output_file', help='比較結果の出力ファイル (.md)')
+    parser.add_argument('output_file', nargs='?', help='比較結果の出力ファイル (.md)。指定しない場合は自動生成')
     parser.add_argument('--verbose', '-v', action='store_true', help='詳細な処理情報を標準エラー出力に表示する')
 
     args = parser.parse_args()
 
+    # 入力ファイルに拡張子を追加
+    dxf_labels_file = ensure_file_extension(args.dxf_labels_file, '.txt')
+    circuit_symbols_file = ensure_file_extension(args.circuit_symbols_file, '.txt')
+
     # 入力ファイルの存在確認
-    if not os.path.exists(args.dxf_labels_file):
-        print(f"エラー: 図面ラベルファイル '{args.dxf_labels_file}' が見つかりません", file=sys.stderr)
+    if not os.path.exists(dxf_labels_file):
+        print(f"エラー: 図面ラベルファイル '{dxf_labels_file}' が見つかりません", file=sys.stderr)
         return 1
-    if not os.path.exists(args.circuit_symbols_file):
-        print(f"エラー: 回路記号ファイル '{args.circuit_symbols_file}' が見つかりません", file=sys.stderr)
+    if not os.path.exists(circuit_symbols_file):
+        print(f"エラー: 回路記号ファイル '{circuit_symbols_file}' が見つかりません", file=sys.stderr)
         return 1
 
+    # 出力ファイル名の処理
+    if args.output_file is None:
+        # 出力ファイル名が指定されていない場合、デフォルト名を生成
+        output_file = get_default_output_filename(dxf_labels_file, circuit_symbols_file)
+        print(f"出力ファイル名が指定されていないため、デフォルト名を使用します: {output_file}", file=sys.stderr)
+    else:
+        # 出力ファイル名が指定されている場合、拡張子を確認・追加
+        output_file = ensure_file_extension(args.output_file, '.md')
+
     # 出力ファイル拡張子の確認とディレクトリ作成 (エラー出力先をstderrに修正)
-    if not args.output_file.lower().endswith('.md'):
+    if not output_file.lower().endswith('.md'):
         # 警告のみとし、ファイル名は変更しない方針も検討可
-        print(f"警告: 出力ファイル '{args.output_file}' の拡張子は .md を推奨します。", file=sys.stderr)
+        print(f"警告: 出力ファイル '{output_file}' の拡張子は .md を推奨します。", file=sys.stderr)
         # args.output_file += '.md' # 自動変更する場合はコメント解除
         # print(f"出力ファイル名を '{args.output_file}' に変更しました", file=sys.stderr)
 
-    output_dir = os.path.dirname(args.output_file)
+    output_dir = os.path.dirname(output_file)
     if output_dir and not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -157,16 +188,16 @@ def main():
 
     # 比較を実行
     success = compare_label_files(
-        args.dxf_labels_file,
-        args.circuit_symbols_file,
-        args.output_file,
+        dxf_labels_file,
+        circuit_symbols_file,
+        output_file,
         verbose=args.verbose
     )
 
     # 終了メッセージを標準エラー出力へ
     if success:
         print(f"\n比較処理が正常に完了しました。", file=sys.stderr)
-        print(f"結果は '{os.path.abspath(args.output_file)}' を確認してください。", file=sys.stderr) # 絶対パス表示
+        print(f"結果は '{os.path.abspath(output_file)}' を確認してください。", file=sys.stderr) # 絶対パス表示
         return 0 # 正常終了コード
     else:
         print(f"\n比較処理中にエラーが発生しました。", file=sys.stderr)

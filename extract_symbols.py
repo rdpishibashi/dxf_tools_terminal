@@ -5,6 +5,7 @@ import pandas as pd
 import argparse
 import os
 import re
+import sys
 
 def extract_alphabetic_part(symbol):
     """
@@ -132,37 +133,72 @@ def extract_circuit_symbols(input_excel, output_txt):
         print(f"エラー: {str(e)}")
         return False
 
+def ensure_file_extension(filename, default_ext):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+def get_default_output_filename(input_excel):
+    """
+    デフォルトの出力ファイル名を生成する
+    入力ファイルの名前をベースにして、回路記号リストを示す接尾辞を追加
+    """
+    base = os.path.basename(input_excel)
+    name, _ = os.path.splitext(base)
+    return f"{name}_circuit_symbols.txt"
+
 def main():
     # コマンドライン引数を解析
     parser = argparse.ArgumentParser(description='Excelファイルから回路記号リストを抽出します')
     parser.add_argument('input_excel', help='入力Excelファイルのパス')
-    parser.add_argument('output_txt', help='出力テキストファイルのパス')
+    parser.add_argument('output_txt', nargs='?', help='出力テキストファイルのパス。指定しない場合は自動生成')
     
     args = parser.parse_args()
     
+    # 入力ファイル名に拡張子を追加
+    input_excel = ensure_file_extension(args.input_excel, '.xlsx')
+    
     # 入力ファイルの存在確認
-    if not os.path.exists(args.input_excel):
-        print(f"エラー: 入力ファイル '{args.input_excel}' が見つかりません")
+    if not os.path.exists(input_excel):
+        print(f"エラー: 入力ファイル '{input_excel}' が見つかりません")
         return 1
     
     # 入力ファイル拡張子の確認
-    if not args.input_excel.lower().endswith('.xlsx'):
-        print(f"エラー: 入力ファイル '{args.input_excel}' はExcelファイル(.xlsx)である必要があります")
+    if not input_excel.lower().endswith('.xlsx'):
+        print(f"エラー: 入力ファイル '{input_excel}' はExcelファイル(.xlsx)である必要があります")
         return 1
     
+    # 出力ファイル名の処理
+    if args.output_txt is None:
+        # 出力ファイル名が指定されていない場合、デフォルト名を生成
+        output_txt = get_default_output_filename(input_excel)
+        print(f"出力ファイル名が指定されていないため、デフォルト名を使用します: {output_txt}")
+    else:
+        # 出力ファイル名が指定されている場合、拡張子を確認・追加
+        output_txt = ensure_file_extension(args.output_txt, '.txt')
+    
+    # 出力拡張子の確認
+    if not output_txt.endswith('.txt'):
+        print(f"警告: 出力ファイルの拡張子は '.txt' を推奨します。")
+        output_txt += '.txt'
+        print(f"出力ファイル名を '{output_txt}' に変更しました。")
+    
     # 出力先ディレクトリの存在確認
-    output_dir = os.path.dirname(args.output_txt)
+    output_dir = os.path.dirname(output_txt)
     if output_dir and not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
+            print(f"出力ディレクトリ '{output_dir}' を作成しました。")
         except Exception as e:
             print(f"エラー: 出力ディレクトリ '{output_dir}' を作成できません: {str(e)}")
             return 1
     
     # 回路記号抽出処理を実行
-    success = extract_circuit_symbols(args.input_excel, args.output_txt)
+    success = extract_circuit_symbols(input_excel, output_txt)
     
     return 0 if success else 1
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())
