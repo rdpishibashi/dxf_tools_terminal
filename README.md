@@ -23,13 +23,7 @@ python dxf_compare_dxf.py file_a.dxf file_b.dxf output.dxf [--tolerance 1e-6]
 
 ### 2. DXF部品ラベル抽出
 
-DXFファイルからMTEXT要素のラベルを抽出し、テキストファイルに出力します。部品番号として解釈されないラベルを除外するフィルタリング機能も搭載しています。
-
-```
-python dxf_compare_text.py input.dxf output.txt [--filter] [--sort {asc,desc,none}]
-```
-
-拡張機能として、セミコロン区切りの4番目の要素を抽出する機能も提供します：
+DXFファイルからMTEXT要素のラベルを抽出し、テキストファイルに出力します。部品記号と考えられるラベルだけを出力フィルタリング機能もあります。
 
 ```
 python dxf_extract_labels.py input.dxf output.txt [--filter] [--no-filter] [--sort {asc,desc,none}] [--verbose]
@@ -56,7 +50,7 @@ python extract_symbols.py input.xlsx output.txt
 DXFファイルの構造を詳細に分析し、ExcelまたはCSV形式で出力します。
 
 ```
-python dxf_structure_record.py input.dxf output.xlsx [--csv] [--split]
+python dxf_analyze_structure.py input.dxf output.xlsx [--csv] [--split]
 ```
 
 ### 6. DXF階層構造表示
@@ -82,21 +76,7 @@ streamlit run app.py
 - Python 3.8以上
 - 必要なライブラリ：ezdxf, pandas, streamlit
 
-### 環境構築
 
-```bash
-# 仮想環境の作成
-python -m venv venv
-
-# 仮想環境の有効化
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
-# 必要なパッケージのインストール
-pip install -r requirements.txt
-```
 
 ## 利用方法
 
@@ -122,21 +102,7 @@ streamlit run app.py
 - DXFファイルのバージョンは R2010 で出力されます
 - 大規模なDXFファイルを処理する場合、メモリ使用量にご注意ください
 - 出力ファイル名に拡張子がない場合は適切な拡張子が自動的に追加されます
+- 出力ファイル名が指定されていない場合は入力ファイル名をベースにしたデフォルト名を使用
+- ファイル名に拡張子がない場合は適切な拡張子を自動追加
+- 出力ディレクトリが存在しない場合は自動作成
 
-## 開発者向け情報
-
-### スクリプトの拡張
-
-各スクリプトは以下の共通機能を持っています：
-
-1. 出力ファイル名が指定されていない場合は入力ファイル名をベースにしたデフォルト名を使用
-2. ファイル名に拡張子がない場合は適切な拡張子を自動追加
-3. 出力ディレクトリが存在しない場合は自動作成
-
-### エラーハンドリング
-
-すべてのスクリプトは、エラー発生時に適切なメッセージを表示し、システム終了コードを返します。
-
-## ライセンス
-
-自社内利用に限定。

@@ -23,7 +23,7 @@ tool_option = st.sidebar.selectbox(
     "機能を選択してください",
     [
         "DXF図面比較 (図形要素の変更点を可視化)", 
-        "DXF部品ラベル抽出", 
+        "DXFラベル抽出", 
         "部品リスト比較", 
         "回路記号リスト抽出 (Excel部品表から)",
         "DXF構造分析",
@@ -203,11 +203,11 @@ if tool_option == "DXF図面比較 (図形要素の変更点を可視化)":
                 st.error("DXF比較処理中にエラーが発生しました。")
 
 # DXF部品ラベル抽出ツール
-elif tool_option == "DXF部品ラベル抽出":
-    st.header("DXF部品ラベル抽出")
+elif tool_option == "DXFラベル抽出":
+    st.header("DXFラベル抽出")
     st.markdown("""
     DXFファイルからMTEXT要素のラベルを抽出し、テキストファイルに出力します。
-    部品番号として解釈されないラベルを除外するフィルタリング機能があります。
+    部品記号だけを出力するフィルタリング機能があります。
     """)
     
     # ファイルアップロード
@@ -216,17 +216,13 @@ elif tool_option == "DXF部品ラベル抽出":
     # 抽出オプション
     col1, col2 = st.columns(2)
     with col1:
-        filter_option = st.checkbox("部品番号以外のラベルを除外", value=True)
+        filter_option = st.checkbox("部品記号だけを出力", value=True)
     with col2:
         sort_option = st.selectbox(
             "ソート順", 
             [("昇順", "asc"), ("降順", "desc"), ("ソートなし", "none")],
             format_func=lambda x: x[0]
         )
-
-    # 拡張抽出モードオプション
-    use_extract_labels = st.checkbox("MTEXTの4番目のセグメント（セミコロン区切り）を抽出", value=False, 
-                                 help="特定形式のMTEXTからセミコロン区切りの4番目の要素を抽出")
     
     verbose_option = st.checkbox("詳細情報を表示", value=False)
     
@@ -241,38 +237,23 @@ elif tool_option == "DXF部品ラベル抽出":
             # 出力ファイル名を設定
             output_file = os.path.join(temp_dir, f"{os.path.splitext(dxf_file.name)[0]}_labels.txt")
             
-            # 使用するスクリプトとコマンドを決定
-            if use_extract_labels:
-                script = "dxf_extract_labels.py"
-                cmd = [
-                    "python", script,
-                    dxf_file_path,
-                    output_file
-                ]
-                
-                if filter_option:
-                    cmd.append("--filter")
-                else:
-                    cmd.append("--no-filter")
-                    
-                if sort_option[1] != "none":
-                    cmd.extend(["--sort", sort_option[1]])
-                    
-                if verbose_option:
-                    cmd.append("--verbose")
+            # コマンド実行
+            cmd = [
+                "python", "dxf_extract_labels.py",
+                dxf_file_path,
+                output_file
+            ]
+            
+            if filter_option:
+                cmd.append("--filter")
             else:
-                script = "dxf_compare_text.py"
-                cmd = [
-                    "python", script,
-                    dxf_file_path,
-                    output_file
-                ]
+                cmd.append("--no-filter")
                 
-                if filter_option:
-                    cmd.append("--filter")
-                    
-                if sort_option[1] != "none":
-                    cmd.extend(["--sort", sort_option[1]])
+            if sort_option[1] != "none":
+                cmd.extend(["--sort", sort_option[1]])
+                
+            if verbose_option:
+                cmd.append("--verbose")
             
             # プロセス実行と出力表示
             st.text("処理中...")
@@ -294,7 +275,7 @@ elif tool_option == "部品リスト比較":
     """)
     
     # ファイルアップロード
-    file_a = st.file_uploader("図面上の部品ラベルリスト", type=["txt"], help="DXF部品ラベル抽出ツールで抽出したテキストファイル")
+    file_a = st.file_uploader("図面上の部品ラベルリスト", type=["txt"], help="DXFラベル抽出ツールで抽出したテキストファイル")
     file_b = st.file_uploader("回路図シンボルリスト", type=["txt"], help="回路記号リスト抽出ツールで抽出したテキストファイル")
     
     verbose_option = st.checkbox("詳細情報を表示", value=False)
