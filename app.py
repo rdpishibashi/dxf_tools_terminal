@@ -331,4 +331,163 @@ elif tool_option == "部品リスト比較":
                 st.text(output)
                 show_result_file(output_file, "md")
             else:
-                st.error("部品リスト比較処理中にエラーが発生しました
+                st.error("部品リスト比較処理中にエラーが発生しました。")
+
+# 回路記号リスト抽出ツール
+elif tool_option == "回路記号リスト抽出 (Excel部品表から)":
+    st.header("回路記号リスト抽出")
+    st.markdown("""
+    Excel形式の部品表（構成表）から回路記号リストを抽出します。
+    Excelファイル名は、抽出対象となるアセンブリ番号と一致させてください。
+    """)
+    
+    # ファイルアップロード
+    excel_file = st.file_uploader("Excelファイル（部品表）", type=["xlsx"])
+    
+    if st.button("抽出実行", disabled=(excel_file is None)):
+        with st.spinner("Excelファイルから回路記号を抽出中..."):
+            # 一時ディレクトリの作成
+            temp_dir = tempfile.mkdtemp()
+            
+            # ファイルを一時ディレクトリに保存
+            excel_file_path, _ = save_uploaded_file(excel_file, temp_dir)
+            
+            # 出力ファイル名を設定
+            output_file = os.path.join(temp_dir, f"{os.path.splitext(excel_file.name)[0]}_circuit_symbols.txt")
+            
+            # コマンド実行
+            cmd = [
+                "python", "extract_symbols.py",
+                excel_file_path,
+                output_file
+            ]
+            
+            # プロセス実行と出力表示
+            st.text("処理中...")
+            returncode, output = execute_command(cmd)
+            
+            if returncode == 0:
+                # 結果表示
+                st.text(output)
+                show_result_file(output_file, "txt")
+            else:
+                st.error("回路記号リスト抽出処理中にエラーが発生しました。")
+
+# DXF構造分析ツール
+elif tool_option == "DXF構造分析":
+    st.header("DXF構造分析")
+    st.markdown("""
+    DXFファイルの構造を詳細に分析し、ExcelまたはCSV形式で出力します。
+    大量のデータがある場合はCSVで出力されます。
+    """)
+    
+    # ファイルアップロード
+    dxf_file = st.file_uploader("DXFファイル", type=["dxf"])
+    
+    # 出力フォーマット
+    output_format = st.radio(
+        "出力フォーマット",
+        [("Excel", "xlsx"), ("CSV", "csv")],
+        format_func=lambda x: x[0]
+    )
+    
+    split_option = st.checkbox("セクションごとに別ファイルに分割", value=False)
+    
+    if st.button("分析実行", disabled=(dxf_file is None)):
+        with st.spinner("DXFファイルを分析中..."):
+            # 一時ディレクトリの作成
+            temp_dir = tempfile.mkdtemp()
+            
+            # ファイルを一時ディレクトリに保存
+            dxf_file_path, _ = save_uploaded_file(dxf_file, temp_dir)
+            
+            # 出力ファイル名を設定
+            output_file = os.path.join(temp_dir, f"{os.path.splitext(dxf_file.name)[0]}_structure.{output_format[1]}")
+            
+            # コマンド実行
+            cmd = [
+                "python", "dxf_structure_record.py",
+                dxf_file_path,
+                output_file
+            ]
+            
+            if output_format[1] == "csv":
+                cmd.append("--csv")
+                
+            if split_option:
+                cmd.append("--split")
+            
+            # プロセス実行と出力表示
+            st.text("処理中...")
+            returncode, output = execute_command(cmd)
+            
+            if returncode == 0:
+                # 結果表示
+                st.text(output)
+                
+                # 分割ファイルか単一ファイルかでの表示切り替え
+                if split_option:
+                    # 分割ファイルの場合、すべてのファイルを検索して表示
+                    result_files = glob.glob(os.path.join(temp_dir, f"{os.path.splitext(dxf_file.name)[0]}_structure_*.{output_format[1]}"))
+                    
+                    if result_files:
+                        st.success(f"{len(result_files)}個のファイルが生成されました")
+                        
+                        for file_path in result_files:
+                            with st.expander(f"ファイル: {os.path.basename(file_path)}"):
+                                show_result_file(file_path, output_format[1])
+                    else:
+                        st.error("生成されたファイルが見つかりません")
+                else:
+                    # 単一ファイルの場合
+                    show_result_file(output_file, output_format[1])
+            else:
+                st.error("DXF構造分析処理中にエラーが発生しました。")
+
+# DXF階層構造表示ツール
+elif tool_option == "DXF階層構造表示":
+    st.header("DXF階層構造表示")
+    st.markdown("""
+    DXFファイルの階層構造をMarkdownフォーマットで表示します。
+    DXFファイルのセクション、テーブル、ブロック、エンティティ、オブジェクトなどの構造を確認できます。
+    """)
+    
+    # ファイルアップロード
+    dxf_file = st.file_uploader("DXFファイル", type=["dxf"])
+    
+    if st.button("階層構造表示", disabled=(dxf_file is None)):
+        with st.spinner("DXFファイルの階層構造を解析中..."):
+            # 一時ディレクトリの作成
+            temp_dir = tempfile.mkdtemp()
+            
+            # ファイルを一時ディレクトリに保存
+            dxf_file_path, _ = save_uploaded_file(dxf_file, temp_dir)
+            
+            # 出力ファイル名を設定
+            output_file = os.path.join(temp_dir, f"{os.path.splitext(dxf_file.name)[0]}_hierarchy.md")
+            
+            # コマンド実行
+            cmd = [
+                "python", "dxf_hierarchy.py",
+                dxf_file_path,
+                output_file
+            ]
+            
+            # プロセス実行と出力表示
+            st.text("処理中...")
+            returncode, output = execute_command(cmd)
+            
+            if returncode == 0:
+                # 結果表示
+                show_result_file(output_file, "md")
+            else:
+                st.error("DXF階層構造表示処理中にエラーが発生しました。")
+
+# フッター情報
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 電気設計支援ツール")
+st.sidebar.markdown("バージョン: 1.0.0")
+st.sidebar.markdown(f"最終更新日: {datetime.now().strftime('%Y-%m-%d')}")
+st.sidebar.markdown("開発者: DX設計チーム")
+st.sidebar.markdown("---")
+st.sidebar.markdown("© 2025 製品開発支援ソリューション")
