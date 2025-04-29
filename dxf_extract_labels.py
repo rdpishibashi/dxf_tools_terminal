@@ -105,14 +105,13 @@ def is_filtered_label(label):
     # 最終的なラベルを返す (除外されなかった場合)
     return False, final_reason, current_label
 
-# --- extract_labels_from_dxf (簡素化) ---
+# --- extract_labels_from_dxf (セミコロン区切りで4つ目の要素を抽出するように変更) ---
 def extract_labels_from_dxf(input_dxf, filter_labels=True, sort_order='asc'):
-    """DXFからラベルを抽出・フィルタリング (簡素化版)"""
+    """DXFからMTEXTエンティティの4番目のセグメント（3つ目のセミコロンの後）を抽出・フィルタリング"""
     info = {
         "total_extracted": 0, "filtered_count": 0, "skipped_count": 0,
         "final_count": 0, "skipped_labels": [], "filtered_labels_info": []
     }
-    FORMAT_CODE_PATTERN = re.compile(r'(\\[A-Za-z0-9\.]+;)|({[^}]*})|(\\.)')
 
     try:
         doc = ezdxf.readfile(input_dxf)
@@ -123,11 +122,15 @@ def extract_labels_from_dxf(input_dxf, filter_labels=True, sort_order='asc'):
             try:
                 if entity.dxftype() == 'MTEXT':
                     text = entity.text
-                    cleaned = FORMAT_CODE_PATTERN.sub('', text)
-                    cleaned = cleaned.replace('\\P', ' ').replace('\\p', ' ').strip()
-                    cleaned = cleaned.replace('%%U', '').strip()
-                    if cleaned:
-                        raw_labels.append(cleaned)
+                    # セミコロンで分割し、4つ目の要素（インデックス3）を取得
+                    segments = text.split(';')
+                    if len(segments) >= 4:  # 少なくとも4つのセグメントがあることを確認
+                        label = segments[3].strip()
+                        if label:
+                            raw_labels.append(label)
+                    else:
+                        info["skipped_count"] += 1
+                        info["skipped_labels"].append((entity.dxftype(), "セミコロン区切りの4番目の要素が存在しない"))
             except AttributeError:
                  info["skipped_count"] += 1
                  info["skipped_labels"].append((entity.dxftype(), "AttributeError"))
@@ -179,14 +182,22 @@ def extract_labels_from_dxf(input_dxf, filter_labels=True, sort_order='asc'):
         print(f"エラー: 予期せぬエラー: {str(e)}", file=sys.stderr)
         raise
 
-# --- main (引数パーサー変更、verbose処理追加) ---
+# --- 拡張子を確保する補助関数 ---
+def ensure_file_extension(filename, default_ext):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+# --- main (拡張子処理改善) ---
 def main():
     parser = argparse.ArgumentParser(
         description='DXFファイルからMTEXT要素のラベルを抽出・フィルタリングし、テキストファイルに出力します。',
         formatter_class=argparse.RawTextHelpFormatter
     )
-    parser.add_argument('input_dxf', help='入力DXFファイル (.dxf)')
-    parser.add_argument('output_file', help='出力テキストファイル (.txt)')
+    parser.add_argument('input_dxf', help='入力DXFファイル (拡張子がない場合は .dxf が自動追加)')
+    parser.add_argument('output_file', help='出力テキストファイル (拡張子がない場合は .txt が自動追加)')
     # フィルター関連オプション
     parser.add_argument('--filter', action='store_true', default=True, # デフォルトON
                         help='フィルターを適用します（デフォルト）。除外条件はコード参照。')
@@ -203,18 +214,17 @@ def main():
 
     args = parser.parse_args()
 
+    # 拡張子を追加
+    input_dxf = ensure_file_extension(args.input_dxf, '.dxf')
+    output_file = ensure_file_extension(args.output_file, '.txt')
+
     # ファイルチェック
-    if not os.path.exists(args.input_dxf):
-        print(f"エラー: 入力ファイル '{args.input_dxf}' が見つかりません", file=sys.stderr)
+    if not os.path.exists(input_dxf):
+        print(f"エラー: 入力ファイル '{input_dxf}' が見つかりません", file=sys.stderr)
         return 1
-    if not args.input_dxf.lower().endswith('.dxf'):
-        print(f"エラー: 入力ファイル '{args.input_dxf}' はDXFファイル(.dxf)である必要があります", file=sys.stderr)
-        return 1
-    if not args.output_file.lower().endswith('.txt'):
-         print(f"情報: 出力ファイル '{args.output_file}' の拡張子は .txt を推奨します。", file=sys.stderr)
 
     # ディレクトリ作成
-    output_dir = os.path.dirname(args.output_file)
+    output_dir = os.path.dirname(output_file)
     if output_dir and not os.path.exists(output_dir):
         try:
             os.makedirs(output_dir)
@@ -224,16 +234,16 @@ def main():
             return 1
 
     try:
-        # ラベル抽出処理の呼び出し (引数変更)
+        # ラベル抽出処理の呼び出し
         labels, info = extract_labels_from_dxf(
-            args.input_dxf,
+            input_dxf,
             filter_labels=args.filter,
             sort_order=args.sort_order
         )
 
         # 処理結果のサマリー表示 (標準エラー出力へ)
         print(f"--- 処理結果 ---", file=sys.stderr)
-        print(f"入力DXF: {args.input_dxf}", file=sys.stderr)
+        print(f"入力DXF: {input_dxf}", file=sys.stderr)
         print(f"抽出総数: {info['total_extracted']}", file=sys.stderr)
         if info["skipped_count"] > 0:
             print(f"スキップ数: {info['skipped_count']}", file=sys.stderr)
@@ -249,15 +259,15 @@ def main():
         print(f"最終出力数: {info['final_count']}", file=sys.stderr)
         sort_map = {'asc': '昇順', 'desc': '降順', 'none': 'なし'}
         print(f"ソート: {sort_map.get(args.sort_order, '不明')}", file=sys.stderr)
-        print(f"出力ファイル: {args.output_file}", file=sys.stderr)
+        print(f"出力ファイル: {output_file}", file=sys.stderr)
 
         # ラベルをファイルに書き込み
         try:
-            with open(args.output_file, 'w', encoding='utf-8') as f:
+            with open(output_file, 'w', encoding='utf-8') as f:
                 for label in labels:
                     f.write(label + "\n")
         except Exception as e:
-             print(f"エラー: 出力ファイル '{args.output_file}' への書き込み失敗: {str(e)}", file=sys.stderr)
+             print(f"エラー: 出力ファイル '{output_file}' への書き込み失敗: {str(e)}", file=sys.stderr)
              return 1
 
         # verbose オプション処理

@@ -3,6 +3,7 @@ import sys
 import ezdxf
 import argparse
 import pandas as pd
+import os
 from io import StringIO
 
 # バージョンに応じた TagWriter のインポート
@@ -87,24 +88,112 @@ def analyze_dxf_structure(dxf_file):
 
     return all_rows
 
+def save_by_section(df, base_filename):
+    """Save data split by section to multiple Excel files"""
+    sections = df['Section'].unique()
+    base_name, ext = os.path.splitext(base_filename)
+    
+    # 拡張子がない場合はxlsxをデフォルトとして追加
+    if not ext:
+        ext = '.xlsx'
+    
+    for section in sections:
+        # セクション名から括弧などを取り除いてファイル名に適した形式に変換
+        section_safe = section.replace('(', '_').replace(')', '').replace(' ', '_')
+        section_filename = f"{base_name}_{section_safe}{ext}"
+        
+        try:
+            section_df = df[df['Section'] == section]
+            # Excel行数制限チェック
+            if ext.lower() == '.xlsx' and len(section_df) > 1000000:
+                csv_filename = f"{base_name}_{section_safe}.csv"
+                section_df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
+                print(f"セクション '{section}' が大きすぎるため CSV として保存: {csv_filename} ({len(section_df)} 行)")
+            else:
+                section_df.to_excel(section_filename, index=False)
+                print(f"保存完了: {section_filename} ({len(section_df)} 行)")
+        except Exception as e:
+            # エラーが発生した場合はCSVにフォールバック
+            csv_filename = f"{base_name}_{section_safe}.csv"
+            section_df.to_csv(csv_filename, index=False, encoding='utf-8-sig')
+            print(f"エラー発生: {e}")
+            print(f"代わりにCSVとして保存: {csv_filename}")
+
+def ensure_extension(filename, default_ext='.xlsx'):
+    """ファイル名に拡張子がない場合、デフォルトの拡張子を追加する"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}{default_ext}"
+    return filename
+
+def ensure_dxf_extension(filename):
+    """入力DXFファイル名に.dxf拡張子を追加（存在しない場合）"""
+    base, ext = os.path.splitext(filename)
+    if not ext:
+        return f"{filename}.dxf"
+    elif ext.lower() != '.dxf':
+        print(f"⚠️  警告: 入力ファイルの拡張子が '.dxf' ではありません: {ext}")
+    return filename
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='DXF構造をCSVまたはExcelに出力')
-    parser.add_argument('input_dxf', help='入力DXFファイル')
-    parser.add_argument('output_file', help='出力ファイル（.csv または .xlsx）')
-    parser.add_argument('--excel', action='store_true', help='強制的にExcel形式で出力')
+    parser = argparse.ArgumentParser(description='DXF構造をExcelまたはCSVに出力')
+    parser.add_argument('input_dxf', help='入力DXFファイル（拡張子がない場合は .dxf が自動追加）')
+    parser.add_argument('output_file', help='出力ファイル（拡張子がない場合は .xlsx が自動追加）')
+    parser.add_argument('--csv', action='store_true', help='強制的にCSV形式で出力')
+    parser.add_argument('--split', action='store_true', help='セクションごとに別ファイルに分割')
     args = parser.parse_args()
 
-    # 拡張子チェック
-    if not args.output_file.endswith('.xlsx'):
-        print("⚠️  警告: 出力ファイルの拡張子は '.xlsx' です。")
-        sys.exit(1)
-
-    data = analyze_dxf_structure(args.input_dxf)
-    df = pd.DataFrame(data, columns=['Section', 'Entity', 'GroupCode', 'GroupCode Definition', 'Value'])
-
-    if args.output_file.endswith('.xlsx') or args.excel:
-        df.to_excel(args.output_file, index=False)
-        print(f"Excel形式出力完了 出力ファイル: {args.output_file}")
+    # 入力ファイルに .dxf 拡張子を追加（必要な場合）
+    input_dxf = ensure_dxf_extension(args.input_dxf)
+    
+    # 出力ファイルに拡張子を追加（必要な場合）
+    output_file = args.output_file
+    if args.csv:
+        output_file = ensure_extension(output_file, '.csv')
     else:
-        df.to_csv(args.output_file, index=False, encoding='utf-8-sig')
-        print(f"CSV形式出力完了 出力ファイル: {args.output_file}")
+        output_file = ensure_extension(output_file, '.xlsx')
+    
+    # 入力ファイルが存在するか確認
+    if not os.path.exists(input_dxf):
+        print(f"❌ エラー: 入力ファイルが見つかりません: {input_dxf}")
+        sys.exit(1)
+    
+    try:
+        # DXF構造データを抽出
+        print(f"DXFファイル分析中: {input_dxf}")
+        data = analyze_dxf_structure(input_dxf)
+        df = pd.DataFrame(data, columns=['Section', 'Entity', 'GroupCode', 'GroupCode Definition', 'Value'])
+        
+        row_count = len(df)
+        print(f"抽出されたデータ: {row_count} 行")
+        
+        # Excelの行数制限をチェック
+        EXCEL_ROW_LIMIT = 1000000  # 実際の制限より少し小さい値を設定
+        
+        if args.split:
+            # セクションごとに分割して保存
+            save_by_section(df, output_file)
+        elif args.csv or row_count > EXCEL_ROW_LIMIT or output_file.endswith('.csv'):
+            # CSV形式で保存
+            csv_file = output_file if output_file.endswith('.csv') else os.path.splitext(output_file)[0] + '.csv'
+            df.to_csv(csv_file, index=False, encoding='utf-8-sig')
+            print(f"CSV形式出力完了 出力ファイル: {csv_file}")
+            if output_file.endswith('.xlsx') and row_count > EXCEL_ROW_LIMIT:
+                print(f"⚠️  注意: データが大きすぎるため ({row_count} 行 > {EXCEL_ROW_LIMIT} 行制限)、Excel形式ではなくCSV形式で保存しました。")
+        else:
+            # Excel形式で保存
+            try:
+                df.to_excel(output_file, index=False)
+                print(f"Excel形式出力完了 出力ファイル: {output_file}")
+            except Exception as e:
+                # エラーが発生した場合はCSVにフォールバック
+                csv_file = os.path.splitext(output_file)[0] + '.csv'
+                df.to_csv(csv_file, index=False, encoding='utf-8-sig')
+                print(f"Excel形式で保存中にエラーが発生しました: {e}")
+                print(f"代わりにCSV形式で保存しました: {csv_file}")
+    
+    except Exception as e:
+        print(f"❌ エラー: 処理中に例外が発生しました: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
