@@ -1,0 +1,4 @@
+ezdxf
+numpy
+openpyxl
+pandas
